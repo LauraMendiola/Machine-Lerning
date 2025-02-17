@@ -1,0 +1,541 @@
+# 1. Business Understanding
+El objetivo del proyecto es clasificar a los clientes entre aquellos que se han ido de un banco frente a los que jamás se han ido. A esto se le conoce como tasa de cancelación de clientes, o churn. Por lo tanto, cuando un cliente se ha ido, se guarda un registro en la columna churn de 1, y en el caso contrario se tendrá un 0
+El dataset ha sido tomado de Kaggle y contiene la siguiente información:
+1. `customer_id` - ID único de cada cliente.
+2. `credit_score` - Rango crediticio, entre más alto, mejor percpeción de crédito al cliente.
+3. `country` - País al que pertenece el cliente.
+4. `gender`- Género del cliente.
+5. `age` - Edad del cliente.
+6. `tenure`- Antigüedad del cliente.
+7. `balance`- Balance actual de dinero en cuenta.
+8. `products_number` - Número de productos bancarios que el cliente ha adquirido.
+9. `credit_card` - Si tiene tarjeta de crédito o no.
+10. `active_member` - Si es cliente activo o no.
+11. `estimated_salary` - Salario estimado del cliente.
+12. `churn` - **Variable objetivo**: Si `1`, entonces el cliente se ha ido del banco en algún periodo, o `0` si nunca se ha ido.
+
+# 2. Data Understanding
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Convertimos el csv en un pandas dataframe
+df = pd.read_csv("Bank Customer Churn Prediction.csv")
+
+# Visualizamos primeras 5 observaciones
+df.head()
+
+# Visualizamos últimas 5 observaciones
+df.tail()
+# Datos nulos y tipo de dato por columna
+df.info()
+# Eliminamos la columna de ID
+df = df.drop("customer_id", axis=1)
+
+# Estadística descriptiva
+df.describe()
+
+## Missing Values
+# Importamos librería
+import missingno as msno
+
+# Creamos matriz para ver si hay datos nulos
+msno.matrix(df)
+
+## Datos únicos
+
+# Número de valores únicos de la variable Country
+df["country"].nunique()
+# Valores únicos de la variable Country
+df["country"].unique()
+# Valores únicos de la variable Country
+df["gender"].unique()
+# Conteo de valores únicos de la variable churn
+df["churn"].value_counts()
+df["country"].value_counts()
+
+
+## Distribuciones (Datos numéricos)
+# Obtenemos el kernel denisty plot de credit_score
+sns.kdeplot(data=df, x="credit_score");
+
+# Obtenemos el kernel denisty plot de credit_score por número de personas que se han ido frente a las que jamás se han ido
+sns.kdeplot(data=df, x="credit_score", hue="churn");
+
+# Obtenemos el kernel denisty plot de balance por número de personas que se han ido frente a las que jamás se han ido
+sns.kdeplot(data=df, x="balance", hue="churn");
+
+Es curioso que haya gente que tenga `$0` en su cuenta bancaria y que no dependa de si tienen la etiqueta `churn` o no. 
+Vamos a crear un query para ver qué pasa con esa gente que tiene en `balance=0`
+
+# Crear query sobre balance
+df.query("balance==0")
+
+# Obtenemos el kernel denisty plot de estimated_salary por número de personas que se han ido frente a las que jamás se han ido y que tienen en balance=0
+sns.kdeplot(data=df.query("balance==0"), x="estimated_salary", hue="churn");
+
+Al parecer siguen una distribución similar...No podemos realizar inferencia de si el salario estimado es un indicador de irse o no
+# Obtenemos el kernel denisty plot de age por número de personas que se han ido frente a las que jamás se han ido
+sns.kdeplot(data=df, x="age", hue="churn");
+
+Por el otro lado, parece ser que la edad sí divide frente a aquellos que se han ido y a aquellos que no.
+Vamos a aprovechar y ver de qué otras formas podemos visualizar este mismo kernel density plot
+
+# Obtenemos el kernel denisty plot de age por número de personas que se han ido frente a las que jamás se han ido pero con fondo
+sns.kdeplot(data=df, x="age", hue="churn", multiple="stack");
+
+Finalmente, vamos a comparar el nivel de crédito que tienen frente al salario estimado:
+# Comparacion
+import plotly.express as px
+fig = px.histogram(df, x="credit_score", y="estimated_salary", color="churn",
+                   marginal="box", # or violin, rug
+                   hover_data=df.columns, 
+                   title="Credit Score & Estimated Salary", opacity=0.8,
+                   labels={
+                     "credit_score": "Credit Score",
+                     "estimated_salary": "Estimated Salary",
+                     "churn": "Churn?"
+                 },)
+fig.update_layout({'plot_bgcolor': 'rgba(0, 0, 0, 0)'})
+fig.show()
+
+## Conteo (Datos categóricos)
+# Obtener el conteo de observaciones por paises
+df["country"].value_counts()
+
+# Dejar únicamente los valores
+df["country"].value_counts().values
+
+# Crear gráfico de barras
+plt.bar(df["country"].value_counts().index.values, 
+        df["country"].value_counts().values, align='center', color=["darkblue", "orange", "red"])
+
+# Agrupamos por country y churn
+df.groupby(['country', 'churn']).size().unstack(fill_value=0)
+
+# Creamos función para pasar nombre de columna y obtener churn o no churn por valores únicos
+def get_bar_churn(column_name):
+  fig, ax = plt.subplots()
+  ax.bar(df.groupby([column_name, 'churn']).size().unstack(fill_value=0)[1].index.values, df.groupby([column_name, 'churn']).size().unstack(fill_value=0)[0].values, 0.65, label='No churn')
+  ax.bar(df.groupby([column_name, 'churn']).size().unstack(fill_value=0)[1].index.values, df.groupby([column_name, 'churn']).size().unstack(fill_value=0)[1].values, 0.65, label='Churn')
+
+  ax.set_ylabel('Personas')
+  ax.set_title(f'Numero de personas por {column_name}')
+  ax.legend()
+
+  plt.show()
+
+  # Country
+get_bar_churn("country")
+
+# Credit card
+get_bar_churn("credit_card")
+# Tenure
+get_bar_churn("tenure")
+
+# Acitve_member
+get_bar_churn("active_member")
+# Gender
+get_bar_churn("gender")
+
+# Products Number
+get_bar_churn("products_number")
+
+## Correlaciones
+# Creamos variables para correlación
+corr_mat = df[["credit_score", "balance", "estimated_salary", "age", "tenure"]]
+# Importamos plotly
+import plotly.express as px
+
+# Declaramos la figura, donde le pasaremos la matriz de correlación redondeada a dos dígitos, que se muestre la cantidad de correlación, y las etiquetas
+fig = px.imshow(corr_mat.corr().round(2), text_auto=True,
+                x=['Credit Score', 'Balance', 'Estimated Salary', 'Age', 'Tenure'],
+                y=['Credit Score', 'Balance', 'Estimated Salary', 'Age', 'Tenure'],
+               width=1200,
+               height=600,
+               color_continuous_scale='RdBu_r', range_color=[-1,1])
+
+# Mostrar figura
+fig.show()
+
+## Categorias paralelas
+# Tomamos algunas variables (únicamente las categóricas)
+df_cp = df[["gender", "country", "products_number", "credit_card", "active_member", "churn"]]
+
+# Importamos plotly
+import plotly.express as px
+
+# Creamos plot de coordenadas paralelas
+fig = px.parallel_categories(df_cp)
+fig.show()
+
+## Queries
+Siempre nos debemos de fijar en las excepciones, por dos razones:
+1. Ahí se encuentran los datos que dan más perspectiva (no se consideran como outliers)
+2. Es donde el modelo falla, y donde se pueden tener `falsos positivos` o `falsos negativos`
+En este caso los queries se ven en:
+1. ¿Cuál es la cantidad de miembros activos que alguna vez se fueron?
+2. Cuántas personas que tienen un balance de cero y ganan dinero ¿se van o se quedan?
+
+### ¿Cuál es la cantidad de miembros activos que alguna vez se fueron?
+# Miembros activos y que se fueron
+df.query("active_member == 1 & churn == 1")
+# Miembros activos y que se fueron
+df.query("active_member == 1 & churn == 1").describe()
+
+# Miembros no activos que jamás regresaron
+df.query("active_member == 0 & churn == 1").describe()
+
+### ¿Cuántas personas que tienen un balance de cero y ganan dinero se van o se quedan?
+# Personas que tienen un balance de 0 y se han ido
+df.query("balance == 0 & churn == 1").describe()
+# Personas que tienen un balance de 0 y NUNCA se han ido
+df.query("balance == 0 & churn == 0").describe()
+
+#Automatización
+se pueden usar librerias como:
+* `PandasProfiling`
+* `DTale`
+* `Sweetviz`
+* `AutoViz`
+* `DataPrep`
+
+# 3. Data Preparation
+# Convertimos en 1 y 0 los generos
+df['gender'].replace(['Male', 'Female'],[0, 1], inplace=True)
+# Visualizamos dataset
+df
+
+# Aplicamos one-hot encoding a nuestra variable country
+df = pd.get_dummies(df, columns = ['country'])
+# Visualizamos dataset
+df
+
+## Scatters
+# Seleccionamos una submuestra de 100 puntos al azar
+sample_df = df.sample(100)
+#sample_df = df.sample(len(df))
+
+# Definir el tamaño del gráfico
+plt.figure(figsize=(10, 8))
+
+# Crear un gráfico de dispersión con puntos más pequeños (el valor s controla el tamaño de los puntos)
+sns.scatterplot(data=sample_df, x="credit_score", y="balance", hue="churn", s=20)
+
+plt.title('Scatter plot of Credit Score vs Balance')
+plt.xlabel('Credit Score')
+plt.ylabel('Balance')
+plt.show()
+
+import plotly.graph_objects as go
+
+# Seleccionamos una submuestra de 100 puntos al azar
+sample_df = df.sample(100)
+
+# Asumo que 'churn' es una variable categórica, la convierto a string por si acaso
+sample_df['churn'] = sample_df['churn'].astype(str)
+
+# Codificamos las categorías en colores
+colors = {'0': 'red', '1': 'blue'}
+sample_df['color'] = sample_df['churn'].map(colors)
+
+fig = go.Figure(data=go.Scatter3d(
+    x=sample_df['credit_score'],
+    y=sample_df['balance'],
+    z=sample_df['estimated_salary'],
+    mode='markers',
+    marker=dict(
+        size=5,  # size controls the size of the dots
+        color=sample_df['color'],  # set color to the new color column
+        opacity=0.8
+    ),
+    text=sample_df['churn']  # the text to display on each dot will be the churn value
+))
+
+# Configurar los títulos de los ejes
+fig.update_layout(scene = dict(
+                    xaxis_title='Credit Score',
+                    yaxis_title='Balance',
+                    zaxis_title='Estimated Salary'),
+                    width=900,
+                    height=900,
+                    )
+
+fig.show()
+
+
+## Particiones
+# Eliminamos variable "churn" de dataset
+X = df.drop("churn", axis=1)
+# Dejamos la variable churn en y
+y = df["churn"]
+# Importamos modulo
+from sklearn.model_selection import train_test_split
+
+# Creamos particiones
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
+# Observamos longitud
+len(X_train), len(y_train), len(X_test), len(y_test)
+
+## Normalizacion
+# Importamos el modulo de sklearn que nos ayudará a normalizar
+from sklearn.preprocessing import MinMaxScaler
+# Inicializamos el normalizadors
+normalizer = MinMaxScaler()
+
+# Normalizaremos X_train
+X_train_norm = normalizer.fit_transform(X_train)
+
+# Normalizamos X_test
+X_test_norm = normalizer.transform(X_test)
+
+
+# 4. Algorithm Selection
+## Heurística (baseline)
+# Creaos lista vacía donde se guardarán las predicciones de la heurístisca
+y_pred_h = []
+
+# Creamos un ciclo for que vaya del 0 al 200
+for i in range(len(X_test)):
+  if X_test["products_number"].iloc[i] ==3: # si el cliente tiene 3 productos entonces...
+    y_pred_h.append(1) # churn de 1
+  else: # de lo contrario
+    y_pred_h.append(0) # churn de 0
+
+# Visualizamos primeras 10 predicciones
+y_pred_h[:10]
+
+# Verificamos la longitud
+len(y_pred_h)
+
+## Logistic Regression
+# Importamos el modulo
+from sklearn.linear_model import LogisticRegression
+# Aplicamos la regresión logística 
+LR = LogisticRegression(solver='liblinear').fit(X_train, y_train)
+
+# Obtenemos las predicciones sobre el set de testeo
+y_pred_lr = LR.predict(X_test)
+# Obtenemos las porbabilidades sobre el set de testeo
+y_prob_lr = LR.predict_proba(X_test)
+
+## Decision Tree
+from sklearn.tree import DecisionTreeClassifier
+
+DT = DecisionTreeClassifier(criterion='entropy',max_depth=2,random_state=1)
+DT.fit(X_train, y_train)
+
+y_pred_dt = DT.predict(X_test)
+DT.predict([[585.0, 0.0, 36.0, 7.0, 0.0, 2.0, 1.0, 0.0, 94283.09, 1.0, 0.0, 0.0]])
+
+## Random Forest
+from sklearn.ensemble import RandomForestClassifier
+RFC=RandomForestClassifier(n_estimators=100,criterion='entropy')
+
+RFC.fit(X_train,y_train)
+y_pred_rfc = RFC.predict(X_test)
+y_prob_rfc = RFC.predict_proba(X_test)
+
+# 5. Evaluation
+## Accuracy
+from sklearn.metrics import accuracy_score
+
+# Accuracy de Heurística
+acc_h = accuracy_score(y_test, y_pred_h)
+acc_h
+
+# Accuracy de logistic regression
+acc_lr = accuracy_score(y_test, y_pred_lr)
+acc_lr
+# Accuracy de logistic regression
+acc_dt = accuracy_score(y_test, y_pred_dt)
+acc_dt
+# Accuracy de random forest
+acc_rfc = accuracy_score(y_test, y_pred_rfc)
+acc_rfc
+
+## Confusion Matrix
+# Importamos modullos
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
+# Creamos matriz de confuzión de Logistic Regression
+cm_lr = confusion_matrix(y_test, y_pred_lr, labels=LR.classes_)
+cm_lr
+
+# Creamos matriz de confuzión de Logistic Regression de forma visual
+disp = ConfusionMatrixDisplay(confusion_matrix=cm_lr, display_labels=["No Churn", "Churn"])
+disp.plot()
+plt.show();
+
+# Creamos matriz de confuzión de Decision tree
+cm_dt = confusion_matrix(y_test, y_pred_dt, labels=DT.classes_)
+cm_dt
+
+# Creamos matriz de confuzión de Decision tree de forma visual
+disp = ConfusionMatrixDisplay(confusion_matrix=cm_dt, display_labels=["No Churn", "Churn"])
+disp.plot()
+plt.show();
+
+## ROC Curve
+# Importamos librerías para curva ROC
+from sklearn.metrics import RocCurveDisplay, roc_curve, auc
+
+# Curva ROC de Logistic Regression
+# Obtener la tasa de false postives y true positives
+fpr, tpr, thresholds = roc_curve(y_test, y_pred_lr)
+# Calculamos Area Under Curve 
+roc_auc = auc(fpr, tpr)
+# Mostramos curva ROC
+display = RocCurveDisplay(fpr=fpr, tpr=tpr, roc_auc=roc_auc)
+display.plot()
+plt.show();
+
+# Curva ROC de Decision Tree
+# Obtener la tasa de false postives y true positives
+fpr, tpr, thresholds = roc_curve(y_test, y_pred_dt)
+# Calculamos Area Under Curve 
+roc_auc = auc(fpr, tpr)
+# Mostramos curva ROC
+display = RocCurveDisplay(fpr=fpr, tpr=tpr, roc_auc=roc_auc)
+display.plot()
+plt.show();
+
+# Curva ROC de Random Forest
+# Obtener la tasa de false postives y true positives
+fpr, tpr, thresholds = roc_curve(y_test, y_pred_rfc)
+# Calculamos Area Under Curve 
+roc_auc = auc(fpr, tpr)
+# Mostramos curva ROC
+display = RocCurveDisplay(fpr=fpr, tpr=tpr, roc_auc=roc_auc)
+display.plot()
+plt.show();
+
+## `classification_report`
+# Importar módulo de classification report
+from sklearn.metrics import classification_report
+# Classification report de logisitc regression
+print(classification_report(y_test, y_pred_lr, target_names=["No Churn", "Churn"]))
+
+# Classification report de decision tree
+print(classification_report(y_test, y_pred_dt, target_names=["No Churn", "Churn"]))
+# Classification report de random forest
+print(classification_report(y_test, y_pred_rfc, target_names=["No Churn", "Churn"]))
+
+
+## Feature Importance
+# Obtenemos los coeficientes de importancia de Logistic Regression
+importance_lr = LR.coef_[0]
+# Visualizamos importancia por feature de Logistic Regression
+plt.figure(figsize=(8,6)) # Ajusta el tamaño del gráfico según lo necesites
+plt.bar(X_train.columns, importance_lr)
+plt.xticks(rotation=90) # Rota las etiquetas si son muy largas
+plt.show()
+
+# Obtenemos la importancia de cada variable de Decision Tree
+importance_dt = DT.feature_importances_
+# Visualizamos importancia por feature de Logistic Regression
+plt.figure(figsize=(8,6)) # Ajusta el tamaño del gráfico según lo necesites
+plt.bar(X_train.columns, importance_dt)
+plt.xticks(rotation=90) # Rota las etiquetas si son muy largas
+plt.show()
+# Obtenemos la importancia de cada variable de Random Forest Classifier
+importance_rfc = RFC.feature_importances_
+
+# Visualizamos importancia por feature de Logistic Regression
+plt.figure(figsize=(8,6)) # Ajusta el tamaño del gráfico según lo necesites
+plt.bar(X_train.columns, importance_rfc)
+plt.xticks(rotation=90) # Rota las etiquetas si son muy largas
+plt.show()
+
+###Graphviz
+# Importamos librería
+from sklearn.tree import export_graphviz
+# Creamos Decision Tree de forma visual
+# Importamos librerías
+from subprocess import call
+from IPython.display import Image
+
+# Creamos gráfica de DT (Decision Tree)
+export_graphviz(DT, out_file='dt.dot', 
+                feature_names = list(X.columns),
+                class_names = ["No Churn", "Churn"],
+                rounded = True, proportion = False, 
+                precision = 2, filled = True, impurity=True)
+
+# Mandar a llamar el archivo
+call(['dot', '-Tpng', 'dt.dot', '-o', 'dt.png', '-Gdpi=600'])
+
+# Show image
+Image(filename = 'dt.png')
+
+# Declaramos qué árbol queremos visualizar (del 0 al 99)
+single_tree = RFC.estimators_[5]
+
+# Creamos gráfica de DT (Decision Tree)
+export_graphviz(single_tree, out_file='rfc.dot', 
+                feature_names = list(X.columns),
+                class_names = ["No Churn", "Churn"],
+                rounded = True, proportion = False, 
+                precision = 2, filled = True, impurity=True)
+
+# Mandar a llamar el archivo
+call(['dot', '-Tpng', 'rfc.dot', '-o', 'rfc.png', '-Gdpi=600'])
+
+# Show image
+Image(filename = 'rfc.png')
+
+
+### Logistic Regression
+# Creamos el objeto que va a explicar al modelo con respexto a X_train
+explainer_lr = shap.Explainer(LR, X_train, feature_names=X.columns)
+# Creamos los shapley values
+shap_values_lr = explainer_lr(X_test)
+# Creamos plot
+shap.plots.beeswarm(shap_values_lr)
+
+### Random Forest
+explainer_rfc = shap.TreeExplainer(RFC)
+
+
+ind = X_test.iloc[[100]]
+shap_values_rfc = explainer_rfc.shap_values(ind)
+
+shap.initjs()
+shap.force_plot(explainer_rfc.expected_value[1], shap_values_rfc[1], ind)
+
+shap.summary_plot(shap_values_rfc, X_train)
+
+# 6. Deployment
+# Instalar gradio
+!pip install gradio -q
+# Importas gradio
+import gradio as gr
+# Crear función
+def pred(x1, x2, x3, x4, x5, x6, x7, x8, x9, x10):
+  # Si el país selecionado es francia
+  if x10 == 0:
+    #pred = RFC.predict([[x1, x2, x3, x4, x5, x6, x7, x8, x9, 1.0, 0.0, 0.0]]) # crea predicción (1 o 0)
+    #return "No Churn" if int(pred)==0 else "Churn"
+    prob = np.squeeze(RFC.predict_proba([[x1, x2, x3, x4, x5, x6, x7, x8, x9, 1.0, 0.0, 0.0]])) # crea probabilidad (del 0 al 1)
+    return {"No Churn": float(prob[0]), "Churn": 1 - float(prob[0])}
+  
+  # Si el país selecionado es Alemania
+  elif x10 == 1:
+    #pred = RFC.predict([[x1, x2, x3, x4, x5, x6, x7, x8, x9, 0.0, 1.0, 0.0]]) # crea predicción (1 o 0)
+    #return "No Churn" if int(pred)==0 else "Churn"
+    prob = np.squeeze(RFC.predict_proba([[x1, x2, x3, x4, x5, x6, x7, x8, x9, 0.0, 1.0, 0.0]])) # crea probabilidad (del 0 al 1)
+    return {"No Churn": float(prob[0]), "Churn": 1 - float(prob[0])}
+  
+  # Si el país selecionado es Españna
+  elif x10 == 2:
+    #pred = RFC.predict([[x1, x2, x3, x4, x5, x6, x7, x8, x9, 0.0, 0.0, 1.0]]) # crea predicción (1 o 0)
+    #return "No Churn" if int(pred)==0 else "Churn"
+    prob = np.squeeze(RFC.predict_proba([[x1, x2, x3, x4, x5, x6, x7, x8, x9, 0.0, 0.0, 1.0]])) # crea probabilidad (del 0 al 1)
+    return {"No Churn": float(prob[0]), "Churn": 1 - float(prob[0])}
+
+
+
+# Creación de la interfaz
+demo = gr.Interface(pred, [x1, x2, x3, x4, x5, x6, x7, x8, x9, x10], "label", 
+                    title="Modelo Random Forest", description="Interfaz de prueba de modelo en dataset de Churn")
+demo.launch(share=True) # lanzamiento
